@@ -8,15 +8,16 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"time"
 )
 
 func main() {
 	retries := 10
 	var conn net.Conn
-	outAddr := os.Getevn("OUTSOCKET_ADDR")
-	if outAddr == nil {
-		outAddr == "localhost:4343"
+	outAddr := os.Getenv("OUTSOCKET_ADDR")
+	if outAddr == "" {
+		outAddr = "localhost:4343"
 	}
 	var err error
 	for i := 0; i < retries && conn == nil; i++ {
