@@ -4,32 +4,22 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
-	"time"
+
+	"github.com/t15k/go-ingest"
+	_ "github.com/t15k/go-ingest/socketout"
 )
 
 func main() {
-	retries := 10
-	var conn net.Conn
-	outAddr := os.Getenv("OUTSOCKET_ADDR")
-	if outAddr == "" {
-		outAddr = "localhost:4343"
+	if len(os.Args) < 2 {
+		log.Println("missing configuration")
+		os.Exit(1)
 	}
-	var err error
-	for i := 0; i < retries && conn == nil; i++ {
-		if err != nil {
-			log.Print("Failed to connect to", outAddr, " will retry in 5 seconds.")
-			c := time.After(5 * time.Second)
-			<-c
-		}
-		conn, err = net.Dial("tcp", outAddr)
-	}
+	receivers, err := ingest.Bootstrap(os.Args[1])
 	if err != nil {
-		panic(fmt.Sprintf("Could not connect after %d retries, because %s.", retries, err))
+		panic(err)
 	}
 	http.HandleFunc("/track/", func(w http.ResponseWriter, r *http.Request) {
 		rawData := r.URL.Query().Get("data")
@@ -52,13 +42,16 @@ func main() {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		conn.Write(buf.Bytes())
-		client := http.Client{}
+		for _, r := range receivers {
+			rr := r.(ingest.Receiver)
+			rr.Receive(buf.Bytes())
+		}
+		/*client := http.Client{}
 		_, err = client.Get(fmt.Sprintf("http://api.mixpanel.com/track/?data=%s", rawData))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
-		}
+		}*/
 	})
 	log.Println("Listening on port 8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
